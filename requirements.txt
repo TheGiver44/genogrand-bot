@@ -1,0 +1,4 @@
+tweepy
+asyncio
+python-dotenv
+pytest
