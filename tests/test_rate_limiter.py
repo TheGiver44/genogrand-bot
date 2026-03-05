@@ -4,13 +4,6 @@ from datetime import datetime, timedelta
 from src.crypto_social_bot import RateLimiter
 
 
-async def _run_wait(rate_limiter: RateLimiter) -> float:
-    start = datetime.utcnow()
-    await rate_limiter.wait_if_needed()
-    end = datetime.utcnow()
-    return (end - start).total_seconds()
-
-
 def test_rate_limiter_defaults_enforce_30_minute_spacing():
     rl = RateLimiter()
     assert rl.min_seconds_between_tweets == 1800
@@ -26,9 +19,16 @@ def test_rate_limiter_mark_tweeted_updates_state():
     assert len(rl._recent_tweets) == 1
 
 
-async def test_rate_limiter_waits_when_called_too_soon():
+def test_rate_limiter_waits_when_called_too_soon():
     rl = RateLimiter(min_seconds_between_tweets=1, max_tweets_per_hour=5)
     rl._last_tweet_at = datetime.utcnow()  # type: ignore[attr-defined]
-    slept = await _run_wait(rl)
+
+    async def run_wait() -> float:
+        start = datetime.utcnow()
+        await rl.wait_if_needed()
+        end = datetime.utcnow()
+        return (end - start).total_seconds()
+
+    slept = asyncio.run(run_wait())
     assert slept >= 0.9
 

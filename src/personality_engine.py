@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
+import random
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +37,7 @@ class PersonalityEngine:
         self.personality_dir = personality_dir or base_dir / "personality"
         self.projects_file = projects_file or base_dir / "projects-list.md"
         self.profile = self._load_profile()
+        self._last_tweet: Optional[str] = None
 
     def _load_profile(self) -> PersonalityProfile:
         how_i_write_path = self.personality_dir / "howiwrite.txt"
@@ -63,26 +66,59 @@ class PersonalityEngine:
         project_hint: Optional[str] = None,
     ) -> str:
         """
-        Generate a single tweet that reflects the user's journey and
-        highlights one project/link from projects-list.
+        Generate a single tweet that reflects the user's journey.
 
-        This is deliberately conservative in length and style so it is
-        safe to post without manual editing.
+        We keep things text-only, avoid links and shill language, and add a bit
+        of controlled variability so tweets are not exact duplicates.
         """
         base_tone = (
             "Most days it feels less like chasing a bag and more like wrestling with "
             "what this whole crypto journey has cost and taught me."
         )
 
-        tweet = (
-            f"{base_tone} No tickers, no charts, just trying to process the wins, "
-            "losses, and the stuff I wish I had said to the people I was grinding "
-            "for while they were still here. #truth"
+        now = datetime.utcnow()
+        day_str = now.strftime("%b %d")
+        time_str = now.strftime("%H:%M UTC")
+
+        openings = [
+            f"{base_tone} {day_str} at {time_str} hits different.",
+            f"{base_tone} {day_str} {time_str} has me in my head again.",
+            f"{base_tone} On {day_str} around {time_str} it feels heavier than usual.",
+        ]
+
+        middles = [
+            "I'm replaying conversations I can't have anymore and trades I should've walked away from.",
+            "I'm realizing how much of this grind was really about trying to protect the people I love.",
+            "I'm weighing what this space has taken from me against what it's actually given back.",
+        ]
+
+        endings = [
+            "No charts, no tickers, just honesty about why I'm still here. #truth",
+            "Not here to sell you anything, just sharing what it really feels like. #truth",
+            "If you feel this too, you're probably in the trenches for real. #truth",
+        ]
+
+        tweet = " ".join(
+            [random.choice(openings), random.choice(middles), random.choice(endings)]
         )
 
-        # Twitter / X hard limit is 280 characters – keep a safety buffer.
-        if len(tweet) > 260:
-            tweet = tweet[:257] + "..."
+        # Avoid repeating the exact same tweet text back-to-back.
+        attempts = 0
+        while self._last_tweet is not None and tweet == self._last_tweet and attempts < 5:
+            tweet = " ".join(
+                [
+                    random.choice(openings),
+                    random.choice(middles),
+                    random.choice(endings),
+                ]
+            )
+            attempts += 1
+
+        # Keep under 240 characters for non-verified accounts.
+        if len(tweet) > 240:
+            tweet = tweet[:237] + "..."
+
+        self._last_tweet = tweet
 
         return tweet
 

@@ -73,6 +73,13 @@ class CryptoSocialBot:
         self.personality = PersonalityEngine()
         self.twitter_bot = self._build_twitter_bot()
 
+        # Seed rate limiter with the timestamp of the latest tweet so that
+        # restarts respect spacing between tweets as much as possible.
+        latest = self.twitter_bot.get_latest_tweet_time()
+        if latest is not None and self.rate_limiter._last_tweet_at is None:  # type: ignore[attr-defined]
+            self.rate_limiter._last_tweet_at = latest  # type: ignore[attr-defined]
+            self.rate_limiter._recent_tweets.append(latest)  # type: ignore[attr-defined]
+
     def _build_twitter_bot(self) -> TwitterBot:
         api_key = os.environ.get("TWITTER_API_KEY")
         api_secret = os.environ.get("TWITTER_API_SECRET")

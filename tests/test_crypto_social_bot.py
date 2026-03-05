@@ -1,6 +1,5 @@
+import asyncio
 import os
-
-import pytest
 
 from src.crypto_social_bot import CryptoSocialBot
 
@@ -14,8 +13,7 @@ class _FakeTwitterBot:
         return {"success": True, "tweet_id": "fake123"}
 
 
-@pytest.mark.asyncio
-async def test_post_single_personality_tweet_makes_one_call(monkeypatch):
+def test_post_single_personality_tweet_makes_one_call(monkeypatch):
     # Provide dummy credentials so CryptoSocialBot can initialize.
     os.environ.setdefault("TWITTER_API_KEY", "x")
     os.environ.setdefault("TWITTER_API_SECRET", "x")
@@ -26,7 +24,10 @@ async def test_post_single_personality_tweet_makes_one_call(monkeypatch):
     fake = _FakeTwitterBot()
     bot.twitter_bot = fake  # type: ignore[assignment]
 
-    await bot.post_single_personality_tweet(attach_image=False)
+    async def run_once() -> None:
+        await bot.post_single_personality_tweet(attach_image=False)
+
+    asyncio.run(run_once())
 
     assert len(fake.calls) == 1
 
