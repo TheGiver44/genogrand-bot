@@ -6,3 +6,6 @@ env/
 # Never commit secrets
 .env
 
+# Local tweet history tracker
+.tweet_tracker.json
+

@@ -43,32 +43,6 @@ class TwitterBot:
         )
         self.logger = logging.getLogger(__name__)
 
-    def get_latest_tweet_time(self) -> Optional[datetime]:
-        """
-        Best-effort helper to fetch the timestamp of the most recent tweet.
-
-        Used to seed rate limiting on process start so that restarts do not
-        accidentally bypass spacing constraints.
-        """
-        try:
-            me = self.client.get_me()
-            user_id = getattr(me.data, "id", None) or me.data["id"]  # type: ignore[index]
-            tweets = self.client.get_users_tweets(
-                id=user_id,
-                max_results=5,
-                tweet_fields=["created_at"],
-            )
-            if not tweets.data:
-                return None
-            latest = tweets.data[0].created_at  # type: ignore[assignment]
-            if isinstance(latest, datetime):
-                return latest
-            # Fallback: Tweepy might give a string
-            return datetime.fromisoformat(str(latest).replace("Z", "+00:00"))
-        except Exception as exc:  # pylint: disable=broad-except
-            self.logger.warning("Unable to fetch latest tweet time: %s", exc)
-            return None
-
     def _upload_media(self, image_paths: Sequence[Path]) -> List[str]:
         media_ids: List[str] = []
         for image_path in image_paths:

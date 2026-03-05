@@ -9,6 +9,7 @@ from typing import List, Optional, Sequence
 
 from .base_bot import TwitterBot
 from .personality_engine import PersonalityEngine
+from .tweet_tracker import get_last_tweet_time, get_last_tweet_text, record_tweet
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -59,8 +60,9 @@ class CryptoSocialBot:
     """
     High-level coordinator that:
     - loads your personality documents
-    - generates tweets in your voice
-    - posts them to Twitter with basic rate limiting
+    - generates tweets in your voice (AI-powered with local fallback)
+    - posts them to Twitter with rate limiting
+    - tracks tweet history locally to avoid duplicates across restarts
     """
 
     def __init__(
@@ -73,12 +75,16 @@ class CryptoSocialBot:
         self.personality = PersonalityEngine()
         self.twitter_bot = self._build_twitter_bot()
 
-        # Seed rate limiter with the timestamp of the latest tweet so that
-        # restarts respect spacing between tweets as much as possible.
-        latest = self.twitter_bot.get_latest_tweet_time()
+        # Seed rate limiter from local tracker file (no API call needed).
+        latest = get_last_tweet_time()
         if latest is not None and self.rate_limiter._last_tweet_at is None:  # type: ignore[attr-defined]
             self.rate_limiter._last_tweet_at = latest  # type: ignore[attr-defined]
             self.rate_limiter._recent_tweets.append(latest)  # type: ignore[attr-defined]
+
+        # Seed personality history so we don't repeat the last tweet on restart.
+        last_text = get_last_tweet_text()
+        if last_text:
+            self.personality._history.append(last_text)
 
     def _build_twitter_bot(self) -> TwitterBot:
         api_key = os.environ.get("TWITTER_API_KEY")
@@ -144,24 +150,17 @@ class CryptoSocialBot:
         self.rate_limiter.mark_tweeted()
 
         if result and result.get("success"):
-            print(f"Tweet posted successfully: {result.get('tweet_id')}")
+            tweet_id = str(result.get("tweet_id", ""))
+            record_tweet(tweet_id=tweet_id, text=tweet_text)
+            print(f"Tweet posted successfully: {tweet_id}")
         else:
             print(f"Error posting tweet: {result}")
 
 
 async def main() -> None:
-    """
-    Manual test entrypoint.
-
-    This will:
-    - load your personality and projects
-    - generate a tweet in your style
-    - post exactly one tweet (optionally with an image)
-    """
     bot = CryptoSocialBot()
     await bot.post_single_personality_tweet()
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-

@@ -68,4 +68,20 @@
   - `CHANGELOG.md`
 - **Validation**: After adding the package marker, `python -m pytest` from the project root succeeds with all tests passing.
 
+## 2026-03-05 - auto-twitter-008
+
+- **Summary**: Major overhaul — replaced broken API tweet-fetch with file-based tracker, rewrote personality engine with 150-combination local algorithm (no shared prefix), integrated Google Gemini free tier for AI-powered tweet generation, and added 16 automated tests covering uniqueness, tracker, rate limiter, and content rules.
+- **Files Touched**:
+  - `src/tweet_tracker.py` (new)
+  - `src/personality_engine.py` (rewritten)
+  - `src/crypto_social_bot.py` (updated)
+  - `src/base_bot.py` (removed broken get_latest_tweet_time)
+  - `tests/test_tweet_tracker.py` (new)
+  - `tests/test_fetch_isolated.py` (new)
+  - `tests/test_personality_engine.py` (rewritten, 5 tests)
+  - `tests/test_crypto_social_bot.py` (rewritten, 3 tests)
+  - `requirements.txt` (added google-generativeai)
+  - `.gitignore` (added .tweet_tracker.json)
+  - `CHANGELOG.md`
+- **Validation**: `python -m pytest -v` passes all 16 tests locally. AI generation requires `GEMINI_API_KEY` env var; falls back gracefully to local algorithm without it.
 
