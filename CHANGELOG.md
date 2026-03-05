@@ -30,3 +30,13 @@
   - `CHANGELOG.md`
 - **Validation**: Scheduler entrypoint `python -m src.scheduler` uses existing rate limiter and has not yet been exercised in a hosted environment; local tweet generation remains under Twitter character limits and contains no links.
 
+## 2026-03-04 - auto-twitter-004
+
+- **Summary**: Added gitignore to prevent committing secrets and documented a plan to rotate leaked Twitter credentials after removing `.env` from git history.
+- **Files Touched**:
+  - `.gitignore`
+  - `SECRETS_ROTATION_PLAN.md`
+  - `CHANGELOG.md`
+- **Validation**: `.env` is now ignored by git; history rewrite and credential rotation still need to be executed and verified manually.
+
+
