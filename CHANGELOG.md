@@ -98,3 +98,12 @@
   - `CHANGELOG.md`
 - **Validation**: GROQ API tested with `GROQ_API_KEY`; `python -m pytest -v` passes all 16 tests; sample tweet generated via enhanced engine (GROQ + data context) within 230 chars and content rules.
 
+## 2026-03-11 - auto-twitter-010
+
+- **Summary**: Made tweets longer (up to 280 chars), richer insight from `data/february-2026-cryptoroundup.txt` and `data/prompts.md`; more personality text (2500 chars each); prompt instructs long-form takes, real takes, education, and emotion; local fallback openers/closers extended for longer tweets.
+- **Files Touched**:
+  - `src/personality_engine.py` (_load_data_context full roundup + 2200 chars prompts, system prompt 280 limit + prompts.md style + emotion, GROQ/Gemini 280 truncation, local 280)
+  - `tests/test_personality_engine.py` (assert <= 280)
+  - `CHANGELOG.md`
+- **Validation**: No logic changes; `python -m pytest -v` must pass (character limit 280).
+

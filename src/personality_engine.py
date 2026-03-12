@@ -92,48 +92,55 @@ class PersonalityEngine:
         if not data_dir.exists() or not data_dir.is_dir():
             return ""
         parts: List[str] = []
-        for name in ("february-2026-cryptoroundup.txt", "prompts.md"):
-            path = data_dir / name
-            if not path.is_file():
-                continue
+        # Full roundup for maximum insight and real takes
+        roundup_path = data_dir / "february-2026-cryptoroundup.txt"
+        if roundup_path.is_file():
             try:
-                raw = path.read_text(encoding="utf-8")
-                # Keep snippet to avoid token overflow; prompts.md use GenoGrand tweet section
-                if name == "prompts.md":
-                    raw = raw[:800]
-                parts.append(raw[:1200].strip())
+                parts.append(roundup_path.read_text(encoding="utf-8").strip())
             except OSError:
-                continue
+                pass
+        # GenoGrand tweet/style guidance from prompts.md (first ~2000 chars covers Tweets, Thread, Shitposter, Twitter Posts)
+        prompts_path = data_dir / "prompts.md"
+        if prompts_path.is_file():
+            try:
+                raw = prompts_path.read_text(encoding="utf-8")
+                # Use GenoGrand sections: Tweets, Twitter Thread, Shitposter, Twitter Posts
+                parts.append(raw[:2200].strip())
+            except OSError:
+                pass
         if not parts:
             return ""
-        return "\n\n=== RECENT CONTEXT / IDEAS (use for relevance, do not quote verbatim) ===\n" + "\n".join(parts)
+        return "\n\n=== RECENT CONTEXT / IDEAS (use for relevance and real takes; do not quote verbatim) ===\n" + "\n".join(parts)
 
     def _build_system_prompt(self) -> str:
         data_context = self._load_data_context()
         return (
             "You are ghostwriting tweets for a crypto builder named Geno (@genogrand_eth). "
             "You must write EXACTLY like him using the voice, emotion, and style from his "
-            "personal documents below. Each tweet must be VERY insightful and engaging—the kind that stops the scroll.\n\n"
-            "THEME (weave in subtly, never preachy): Build in public. The next crypto renaissance is not traders as kings—it's "
-            "developers and development democratized. AI is democratizing access to crypto so anyone can build and "
-            "become their own bank as easy as 1-2-3. Be secretive but authentic and open.\n\n"
+            "personal documents below.\n\n"
+            "TWEET STYLE (from prompts.md): Craft LONG, insightful tweets. Expand on the subject as much as the character limit allows. "
+            "Use Cialdini's methods of persuasion and psychology for engagement. Express passion about how memecoins aren't what they used to be "
+            "and how communities often aren't trying to create something that grows and is self-sustainable. Provide REAL takes, education, and "
+            "actionable insight. Every tweet must INVOKE EMOTION—vulnerability, hope, frustration, conviction, or reflection.\n\n"
+            "THEME (weave in subtly): Build in public. The next crypto renaissance is developers and development democratized; AI is democratizing "
+            "access so anyone can build and become their own bank. Be secretive but authentic and open.\n\n"
             "=== HOW HE WRITES ===\n"
-            f"{self.profile.how_i_write[:1500]}\n\n"
+            f"{self.profile.how_i_write[:2500]}\n\n"
             "=== HIS STORY ===\n"
-            f"{self.profile.story[:1500]}\n\n"
+            f"{self.profile.story[:2500]}\n\n"
             + (f"{data_context}\n\n" if data_context else "")
             + "RULES:\n"
-            "- Max 230 characters. This is a HARD limit, count carefully.\n"
+            "- Max 280 characters. Use the full length when it adds insight, education, or emotional punch. This is a HARD limit—count carefully.\n"
             "- Pure text only. No links, no URLs, no @mentions, no emojis.\n"
             "- No hashtags like #crypto #web3 #memecoin. At most one emotional hashtag like #truth or #realtalk.\n"
             "- Never shill tokens, tickers, or projects by name.\n"
-            "- Each tweet must feel like a completely different thought.\n"
+            "- Each tweet must feel like a completely different thought. Long-form takes, not one-liners.\n"
             "- Vary sentence structure: sometimes start with 'I', sometimes a question, "
             "sometimes a statement about the world, sometimes raw emotion.\n"
             "- Channel real pain, real lessons, vulnerability, builder mentality, "
-            "family sacrifice, and honest reflection.\n"
+            "family sacrifice, and honest reflection. Invoke emotion.\n"
             "- Sound like a real person posting at 2am, not a brand account.\n"
-            "- Use psychological engagement (e.g. Cialdini-style) where it fits: scarcity of insight, social proof of builders, commitment to the craft.\n"
+            "- Use psychological engagement (Cialdini-style): scarcity of insight, social proof of builders, commitment to the craft.\n"
         )
 
     def _generate_with_ai(self, last_tweet: Optional[str] = None) -> Optional[str]:
@@ -143,7 +150,7 @@ class PersonalityEngine:
 
         user_message = (
             f"{history_context}"
-            "\nWrite exactly ONE tweet. Output only the tweet text, nothing else."
+            "\nWrite exactly ONE tweet. Use the full 280 characters if it adds insight, education, or emotion. Output only the tweet text, nothing else."
         )
 
         # Prefer GROQ when available (fast, insightful).
@@ -171,13 +178,13 @@ class PersonalityEngine:
                 ],
                 model="llama-3.3-70b-versatile",
                 temperature=0.85,
-                max_tokens=120,
+                max_tokens=200,
             )
             text = (response.choices[0].message.content or "").strip().strip('"').strip("'")
             if not text:
                 return None
-            if len(text) > 240:
-                text = text[:237] + "..."
+            if len(text) > 280:
+                text = text[:277] + "..."
             if "http" in text.lower() or text.strip().startswith("@"):
                 return None
             return text
@@ -192,8 +199,8 @@ class PersonalityEngine:
         try:
             response = _gemini_model.generate_content(prompt)
             text = response.text.strip().strip('"').strip("'")
-            if len(text) > 240:
-                text = text[:237] + "..."
+            if len(text) > 280:
+                text = text[:277] + "..."
             if "http" in text.lower() or text.startswith("@"):
                 return None
             return text
@@ -206,34 +213,34 @@ class PersonalityEngine:
         ts = now.strftime("%H:%M")
 
         openers = [
-            "I lost my dad while grinding in this space and it changed everything about how I see money.",
-            "People keep asking me why I build. Honestly, I'm still figuring that out myself.",
-            "The hardest part of this journey isn't the losses, it's what you miss while chasing wins.",
-            "Some nights I stare at the screen and wonder if any of this was worth what it cost me.",
-            "I used to think making it meant financial freedom. Now I think it means something deeper.",
-            "Nobody tells you that building in this space can break you in ways money can't fix.",
-            "There's a version of me from two years ago who wouldn't recognize where I am now.",
-            f"It's {ts} UTC and I'm wide awake thinking about every decision that led me here.",
-            "You ever build something you're proud of and still feel like you failed the people who matter most?",
-            "Lost my tech job, lost my father, almost lost myself. But I'm still here building.",
-            "The trenches teach you things no course or thread ever will.",
-            "What I've learned from every failed project is that the real loss is the time, not the money.",
-            "Winning doesn't feel the same when the person you were winning for isn't here anymore.",
-            "I've shipped projects that hit six figures and projects that went to zero. Both taught me something.",
-            "Every builder in this space carries weight that doesn't show up on chain.",
+            "I lost my dad while grinding in this space and it changed everything about how I see money. What we build has to mean something beyond the chart.",
+            "People keep asking me why I build. Honestly, I'm still figuring that out myself. But I know the answer isn't in another pump.",
+            "The hardest part of this journey isn't the losses, it's what you miss while chasing wins. Took me too long to learn that.",
+            "Some nights I stare at the screen and wonder if any of this was worth what it cost me. Then I remember why I started.",
+            "I used to think making it meant financial freedom. Now I think it means something deeper. Building something that outlives the cycle.",
+            "Nobody tells you that building in this space can break you in ways money can't fix. The trenches teach you anyway.",
+            "There's a version of me from two years ago who wouldn't recognize where I am now. Loss does that. So does building through it.",
+            f"It's {ts} UTC and I'm wide awake thinking about every decision that led me here. Some I'd take back. Most I wouldn't.",
+            "You ever build something you're proud of and still feel like you failed the people who matter most? That weight doesn't show on chain.",
+            "Lost my tech job, lost my father, almost lost myself. But I'm still here building. Some days that's the only take that matters.",
+            "The trenches teach you things no course or thread ever will. Real builders know the difference between hype and craft.",
+            "What I've learned from every failed project is that the real loss is the time, not the money. Time you can't get back.",
+            "Winning doesn't feel the same when the person you were winning for isn't here anymore. Build for something bigger than the bag.",
+            "I've shipped projects that hit six figures and projects that went to zero. Both taught me something. Mostly about who I'm building for.",
+            "Every builder in this space carries weight that doesn't show up on chain. Acknowledge it. Then keep building.",
         ]
 
         closers = [
             "Still processing, still building. #truth",
-            "Not looking for sympathy, just being honest about the journey.",
+            "Not looking for sympathy, just being honest about the journey. If you've built, you know.",
             "If you've been through it, you know exactly what I mean. #realtalk",
-            "The grind is real but so is the cost. Remember that.",
-            "Take care of your people before you take care of your portfolio.",
-            "This space will humble you if you let it. I'm proof of that.",
-            "Some lessons you can only learn by living through them.",
+            "The grind is real but so is the cost. Take care of your people first.",
+            "Take care of your people before you take care of your portfolio. I learned that the hard way.",
+            "This space will humble you if you let it. I'm proof of that. Still here.",
+            "Some lessons you can only learn by living through them. No thread can replace that.",
             "Building hits different when it's personal. #truth",
-            "Money comes and goes. The people you love don't always come back.",
-            "Stay honest with yourself even when nobody's watching.",
+            "Money comes and goes. The people you love don't always come back. Build accordingly.",
+            "Stay honest with yourself even when nobody's watching. That's the only edge that lasts.",
         ]
 
         tweet = f"{random.choice(openers)} {random.choice(closers)}"
@@ -243,8 +250,8 @@ class PersonalityEngine:
             tweet = f"{random.choice(openers)} {random.choice(closers)}"
             attempts += 1
 
-        if len(tweet) > 240:
-            tweet = tweet[:237] + "..."
+        if len(tweet) > 280:
+            tweet = tweet[:277] + "..."
 
         return tweet
 
