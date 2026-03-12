@@ -14,6 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 _AI_AVAILABLE = False
 _gemini_model = None
+_groq_client = None
 
 try:
     import google.generativeai as genai  # type: ignore[import-untyped]
@@ -25,6 +26,15 @@ try:
         _AI_AVAILABLE = True
 except ImportError:
     pass
+
+try:
+    from groq import Groq
+
+    _groq_key = os.environ.get("GROQ_API_KEY", "")
+    if _groq_key:
+        _groq_client = Groq(api_key=_groq_key)
+except ImportError:
+    _groq_client = None
 
 
 @dataclass
@@ -76,16 +86,43 @@ class PersonalityEngine:
         lines = self.profile.projects_raw.splitlines()
         return [line.strip() for line in lines if "http" in line]
 
+    def _load_data_context(self) -> str:
+        """Load recent crypto context and ideas from data/ for richer, timely tweets."""
+        data_dir = PROJECT_ROOT / "data"
+        if not data_dir.exists() or not data_dir.is_dir():
+            return ""
+        parts: List[str] = []
+        for name in ("february-2026-cryptoroundup.txt", "prompts.md"):
+            path = data_dir / name
+            if not path.is_file():
+                continue
+            try:
+                raw = path.read_text(encoding="utf-8")
+                # Keep snippet to avoid token overflow; prompts.md use GenoGrand tweet section
+                if name == "prompts.md":
+                    raw = raw[:800]
+                parts.append(raw[:1200].strip())
+            except OSError:
+                continue
+        if not parts:
+            return ""
+        return "\n\n=== RECENT CONTEXT / IDEAS (use for relevance, do not quote verbatim) ===\n" + "\n".join(parts)
+
     def _build_system_prompt(self) -> str:
+        data_context = self._load_data_context()
         return (
             "You are ghostwriting tweets for a crypto builder named Geno (@genogrand_eth). "
             "You must write EXACTLY like him using the voice, emotion, and style from his "
-            "personal documents below.\n\n"
+            "personal documents below. Each tweet must be VERY insightful and engaging—the kind that stops the scroll.\n\n"
+            "THEME (weave in subtly, never preachy): Build in public. The next crypto renaissance is not traders as kings—it's "
+            "developers and development democratized. AI is democratizing access to crypto so anyone can build and "
+            "become their own bank as easy as 1-2-3. Be secretive but authentic and open.\n\n"
             "=== HOW HE WRITES ===\n"
             f"{self.profile.how_i_write[:1500]}\n\n"
             "=== HIS STORY ===\n"
             f"{self.profile.story[:1500]}\n\n"
-            "RULES:\n"
+            + (f"{data_context}\n\n" if data_context else "")
+            + "RULES:\n"
             "- Max 230 characters. This is a HARD limit, count carefully.\n"
             "- Pure text only. No links, no URLs, no @mentions, no emojis.\n"
             "- No hashtags like #crypto #web3 #memecoin. At most one emotional hashtag like #truth or #realtalk.\n"
@@ -96,22 +133,62 @@ class PersonalityEngine:
             "- Channel real pain, real lessons, vulnerability, builder mentality, "
             "family sacrifice, and honest reflection.\n"
             "- Sound like a real person posting at 2am, not a brand account.\n"
+            "- Use psychological engagement (e.g. Cialdini-style) where it fits: scarcity of insight, social proof of builders, commitment to the craft.\n"
         )
 
     def _generate_with_ai(self, last_tweet: Optional[str] = None) -> Optional[str]:
-        if not _AI_AVAILABLE or _gemini_model is None:
-            return None
-
         history_context = ""
         if last_tweet:
             history_context = f"\nThe LAST tweet was: \"{last_tweet}\"\nDo NOT repeat or paraphrase it. Write something completely different.\n"
 
-        prompt = (
-            f"{self._build_system_prompt()}"
+        user_message = (
             f"{history_context}"
             "\nWrite exactly ONE tweet. Output only the tweet text, nothing else."
         )
 
+        # Prefer GROQ when available (fast, insightful).
+        if _groq_client is not None:
+            tweet = self._generate_with_groq(user_message)
+            if tweet is not None:
+                return tweet
+
+        # Fallback to Gemini.
+        if _AI_AVAILABLE and _gemini_model is not None:
+            tweet = self._generate_with_gemini(user_message)
+            if tweet is not None:
+                return tweet
+
+        return None
+
+    def _generate_with_groq(self, user_message: str) -> Optional[str]:
+        if _groq_client is None:
+            return None
+        try:
+            response = _groq_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": self._build_system_prompt()},
+                    {"role": "user", "content": user_message},
+                ],
+                model="llama-3.3-70b-versatile",
+                temperature=0.85,
+                max_tokens=120,
+            )
+            text = (response.choices[0].message.content or "").strip().strip('"').strip("'")
+            if not text:
+                return None
+            if len(text) > 240:
+                text = text[:237] + "..."
+            if "http" in text.lower() or text.strip().startswith("@"):
+                return None
+            return text
+        except Exception as exc:
+            logger.warning("GROQ generation failed, trying fallback: %s", exc)
+            return None
+
+    def _generate_with_gemini(self, user_message: str) -> Optional[str]:
+        if not _AI_AVAILABLE or _gemini_model is None:
+            return None
+        prompt = f"{self._build_system_prompt()}{user_message}"
         try:
             response = _gemini_model.generate_content(prompt)
             text = response.text.strip().strip('"').strip("'")

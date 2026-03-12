@@ -4,9 +4,9 @@ from datetime import datetime, timedelta
 from src.crypto_social_bot import RateLimiter
 
 
-def test_rate_limiter_defaults_enforce_30_minute_spacing():
+def test_rate_limiter_defaults_enforce_12_hour_spacing():
     rl = RateLimiter()
-    assert rl.min_seconds_between_tweets == 1800
+    assert rl.min_seconds_between_tweets == 43200  # 12 hours, 1–2 tweets/day
     assert rl.max_tweets_per_hour == 2
 
 

@@ -85,3 +85,16 @@
   - `CHANGELOG.md`
 - **Validation**: `python -m pytest -v` passes all 16 tests locally. AI generation requires `GEMINI_API_KEY` env var; falls back gracefully to local algorithm without it.
 
+## 2026-03-11 - auto-twitter-009
+
+- **Summary**: Reduced tweet frequency to 1–2 per day (12h min spacing) for verified account; added GROQ as primary AI for tweet generation with `data/` context and prompt engineering; theme: build-in-public, developers democratized, AI democratizing crypto so anyone can build and become their own bank.
+- **Files Touched**:
+  - `src/crypto_social_bot.py` (RateLimiter: min_seconds_between_tweets=43200)
+  - `src/scheduler.py` (interval_minutes=720)
+  - `src/personality_engine.py` (GROQ primary, _load_data_context, theme + prompts.md style in system prompt)
+  - `requirements.txt` (groq)
+  - `tests/test_rate_limiter.py` (default 43200)
+  - `README.md` (rate limit and AI description)
+  - `CHANGELOG.md`
+- **Validation**: GROQ API tested with `GROQ_API_KEY`; `python -m pytest -v` passes all 16 tests; sample tweet generated via enhanced engine (GROQ + data context) within 230 chars and content rules.
+

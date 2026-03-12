@@ -19,8 +19,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 class RateLimiter:
     """Very simple in-memory rate limiter to avoid hitting Twitter limits."""
 
-    # Default: strictly no more than 1 tweet every 30 minutes
-    min_seconds_between_tweets: int = 1800
+    # Verified account: at most 1–2 tweets per day (12h min spacing)
+    min_seconds_between_tweets: int = 43200  # 12 hours
     max_tweets_per_hour: int = 2
     _last_tweet_at: Optional[datetime] = None
     _recent_tweets: List[datetime] = None  # type: ignore[assignment]

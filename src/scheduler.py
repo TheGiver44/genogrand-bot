@@ -9,13 +9,13 @@ from .crypto_social_bot import CryptoSocialBot
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-async def run_scheduler(interval_minutes: int = 35) -> None:
+async def run_scheduler(interval_minutes: int = 720) -> None:
     """
     Simple forever-loop scheduler for production deployments.
 
-    - Uses CryptoSocialBot, which already enforces a 30-minute min spacing.
-    - Sleeps for `interval_minutes` between attempts (default 35 minutes),
-      keeping us well under rate limits and current cost expectations.
+    - Uses CryptoSocialBot, which enforces 12-hour min spacing (1–2 tweets/day).
+    - Sleeps for `interval_minutes` between attempts (default 720 = 12 hours),
+      keeping tweets rare, insightful, and under verified-account limits.
     """
     bot = CryptoSocialBot()
     while True:
