@@ -16,7 +16,7 @@ def test_generate_tweet_within_character_limit():
         tweet = engine.generate_project_tweet()
         assert isinstance(tweet, str)
         assert tweet.strip() != ""
-        assert len(tweet) <= 280
+        assert len(tweet) <= engine.max_tweet_chars
 
 
 def test_generate_tweet_no_links_or_shill():

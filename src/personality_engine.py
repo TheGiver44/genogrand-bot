@@ -8,6 +8,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
+from .changelog_context import (
+    build_changelog_context,
+    build_changelog_tweet_local,
+    discover_changelog_sources,
+    select_changelog_source,
+)
+
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -65,6 +72,7 @@ class PersonalityEngine:
         base_dir = PROJECT_ROOT
         self.personality_dir = personality_dir or base_dir / "personality"
         self.projects_file = projects_file or base_dir / "projects-list.md"
+        self.max_tweet_chars = int(os.environ.get("TWEET_MAX_CHARS", "25000"))
         self.profile = self._load_profile()
         self._history: List[str] = []
 
@@ -112,8 +120,18 @@ class PersonalityEngine:
             return ""
         return "\n\n=== RECENT CONTEXT / IDEAS (use for relevance and real takes; do not quote verbatim) ===\n" + "\n".join(parts)
 
-    def _build_system_prompt(self) -> str:
+    def _build_system_prompt(
+        self,
+        changelog_context: str = "",
+        allow_links: bool = False,
+    ) -> str:
         data_context = self._load_data_context()
+        max_chars = self.max_tweet_chars
+        link_rule = (
+            "- Links are allowed ONLY when sharing changelog/project updates, and only 1 link max as a CTA.\n"
+            if allow_links
+            else "- Pure text only. No links, no URLs, no @mentions, no emojis.\n"
+        )
         return (
             "You are ghostwriting tweets for a crypto builder named Geno (@genogrand_eth). "
             "You must write EXACTLY like him using the voice, emotion, and style from his "
@@ -129,9 +147,10 @@ class PersonalityEngine:
             "=== HIS STORY ===\n"
             f"{self.profile.story[:2500]}\n\n"
             + (f"{data_context}\n\n" if data_context else "")
+            + (f"=== CHANGELOG CONTEXT (use for project update tweets) ===\n{changelog_context}\n\n" if changelog_context else "")
             + "RULES:\n"
-            "- Max 280 characters. Use the full length when it adds insight, education, or emotional punch. This is a HARD limit—count carefully.\n"
-            "- Pure text only. No links, no URLs, no @mentions, no emojis.\n"
+            f"- Max {max_chars} characters. Use the full length when it adds insight, education, or emotional punch. This is a HARD limit—count carefully.\n"
+            + link_rule
             "- No hashtags like #crypto #web3 #memecoin. At most one emotional hashtag like #truth or #realtalk.\n"
             "- Never shill tokens, tickers, or projects by name.\n"
             "- Each tweet must feel like a completely different thought. Long-form takes, not one-liners.\n"
@@ -141,39 +160,65 @@ class PersonalityEngine:
             "family sacrifice, and honest reflection. Invoke emotion.\n"
             "- Sound like a real person posting at 2am, not a brand account.\n"
             "- Use psychological engagement (Cialdini-style): scarcity of insight, social proof of builders, commitment to the craft.\n"
+            "- When speaking about changelog updates, Geno can speak in third person or as the AI agent.\n"
+            "- Be agentic: highlight the change, why it matters, and the next move in one tight flow.\n"
         )
 
-    def _generate_with_ai(self, last_tweet: Optional[str] = None) -> Optional[str]:
+    def _generate_with_ai(
+        self,
+        last_tweet: Optional[str] = None,
+        changelog_context: str = "",
+        allow_links: bool = False,
+    ) -> Optional[str]:
         history_context = ""
         if last_tweet:
             history_context = f"\nThe LAST tweet was: \"{last_tweet}\"\nDo NOT repeat or paraphrase it. Write something completely different.\n"
 
         user_message = (
             f"{history_context}"
-            "\nWrite exactly ONE tweet. Use the full 280 characters if it adds insight, education, or emotion. Output only the tweet text, nothing else."
+            f"\nWrite exactly ONE tweet. Use the full {self.max_tweet_chars} characters if it adds insight, education, or emotion. Output only the tweet text, nothing else."
         )
 
         # Prefer GROQ when available (fast, insightful).
         if _groq_client is not None:
-            tweet = self._generate_with_groq(user_message)
+            tweet = self._generate_with_groq(
+                user_message,
+                changelog_context=changelog_context,
+                allow_links=allow_links,
+            )
             if tweet is not None:
                 return tweet
 
         # Fallback to Gemini.
         if _AI_AVAILABLE and _gemini_model is not None:
-            tweet = self._generate_with_gemini(user_message)
+            tweet = self._generate_with_gemini(
+                user_message,
+                changelog_context=changelog_context,
+                allow_links=allow_links,
+            )
             if tweet is not None:
                 return tweet
 
         return None
 
-    def _generate_with_groq(self, user_message: str) -> Optional[str]:
+    def _generate_with_groq(
+        self,
+        user_message: str,
+        changelog_context: str = "",
+        allow_links: bool = False,
+    ) -> Optional[str]:
         if _groq_client is None:
             return None
         try:
             response = _groq_client.chat.completions.create(
                 messages=[
-                    {"role": "system", "content": self._build_system_prompt()},
+                    {
+                        "role": "system",
+                        "content": self._build_system_prompt(
+                            changelog_context=changelog_context,
+                            allow_links=allow_links,
+                        ),
+                    },
                     {"role": "user", "content": user_message},
                 ],
                 model="llama-3.3-70b-versatile",
@@ -183,25 +228,30 @@ class PersonalityEngine:
             text = (response.choices[0].message.content or "").strip().strip('"').strip("'")
             if not text:
                 return None
-            if len(text) > 280:
-                text = text[:277] + "..."
-            if "http" in text.lower() or text.strip().startswith("@"):
+            if len(text) > self.max_tweet_chars:
+                text = text[: self.max_tweet_chars - 3] + "..."
+            if (not allow_links and "http" in text.lower()) or text.strip().startswith("@"):
                 return None
             return text
         except Exception as exc:
             logger.warning("GROQ generation failed, trying fallback: %s", exc)
             return None
 
-    def _generate_with_gemini(self, user_message: str) -> Optional[str]:
+    def _generate_with_gemini(
+        self,
+        user_message: str,
+        changelog_context: str = "",
+        allow_links: bool = False,
+    ) -> Optional[str]:
         if not _AI_AVAILABLE or _gemini_model is None:
             return None
-        prompt = f"{self._build_system_prompt()}{user_message}"
+        prompt = f\"{self._build_system_prompt(changelog_context=changelog_context, allow_links=allow_links)}{user_message}\"
         try:
             response = _gemini_model.generate_content(prompt)
             text = response.text.strip().strip('"').strip("'")
-            if len(text) > 280:
-                text = text[:277] + "..."
-            if "http" in text.lower() or text.startswith("@"):
+            if len(text) > self.max_tweet_chars:
+                text = text[: self.max_tweet_chars - 3] + "..."
+            if (not allow_links and "http" in text.lower()) or text.startswith("@"):
                 return None
             return text
         except Exception as exc:
@@ -250,8 +300,8 @@ class PersonalityEngine:
             tweet = f"{random.choice(openers)} {random.choice(closers)}"
             attempts += 1
 
-        if len(tweet) > 280:
-            tweet = tweet[:277] + "..."
+        if len(tweet) > self.max_tweet_chars:
+            tweet = tweet[: self.max_tweet_chars - 3] + "..."
 
         return tweet
 
@@ -266,8 +316,36 @@ class PersonalityEngine:
         Tracks recent history to avoid repeats.
         """
         last_tweet = self._history[-1] if self._history else None
+        changelog_sources = discover_changelog_sources()
+        changelog_context = ""
+        allow_links = False
 
-        tweet = self._generate_with_ai(last_tweet=last_tweet)
+        if project_hint and project_hint.startswith("changelog:"):
+            slug = project_hint.split(":", 1)[1].strip()
+            source = select_changelog_source(changelog_sources, slug)
+            if source is not None:
+                changelog_context = build_changelog_context([source])
+                allow_links = True
+                tweet = self._generate_with_ai(
+                    last_tweet=last_tweet,
+                    changelog_context=changelog_context,
+                    allow_links=allow_links,
+                )
+                if tweet is None:
+                    tweet = build_changelog_tweet_local(source, self.max_tweet_chars)
+                self._history.append(tweet)
+                if len(self._history) > 50:
+                    self._history = self._history[-50:]
+                return tweet
+
+        if not project_hint and changelog_sources:
+            changelog_context = build_changelog_context(changelog_sources)
+
+        tweet = self._generate_with_ai(
+            last_tweet=last_tweet,
+            changelog_context=changelog_context,
+            allow_links=allow_links,
+        )
 
         if tweet is None or tweet in self._history:
             tweet = self._generate_local()
