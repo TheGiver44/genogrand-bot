@@ -57,3 +57,25 @@ These are the remaining high-level items for this bot.
 
 ### NEW 
 add support for GROQ_API_KEY, OPENAI_API_KEY, AND GEMINI_API_KEY I've added them to my .env
+'GENOGRAND BOT 
+- We need to update our tweets to utilize some images and also we need to ensure that we make our tweets have different content. Right now we just talk about my father passing and how It changed me. Let's add more depth and discuss more of my history in crypto.
+I'll give you some references.
+
+Example raw tweets: I used to think making it meant financial freedom. Now I think it means something deeper. Money comes and goes. The people you love don't always come back.
+Geno
+@genogrand_eth
+·
+2h
+Lost my tech job, lost my father, almost lost myself. But I'm still here building. Still processing, still building. #truth
+Geno
+@genogrand_eth
+·
+3h
+People keep asking me why I build. Honestly, I'm still figuring that out myself. Take care of your people before you take care of your portfolio.
+Geno
+@genogrand_eth
+·
+5h
+Every builder in this space carries weight that doesn't show up on chain. Take care of your people before you take care of your portfolio.
+
+'
