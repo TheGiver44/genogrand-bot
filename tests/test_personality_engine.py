@@ -48,3 +48,11 @@ def test_tweets_do_not_share_same_opening():
     tweets = [engine.generate_project_tweet() for _ in range(10)]
     first_words = [t.split()[0] for t in tweets]
     assert len(set(first_words)) > 1, "All tweets start with the same word"
+
+
+def test_finalize_tweet_closes_dangling_thought():
+    engine = _make_engine()
+    raw = "It's not just about the tech, it's about the people, it's about creating a community that's"
+    finalized = engine._finalize_tweet(raw, allow_links=False)
+    assert finalized.endswith((".", "!", "?"))
+    assert "mission" in finalized.lower()

@@ -9,3 +9,6 @@ env/
 # Local tweet history tracker
 .tweet_tracker.json
 
+/data
+/personality
+

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import random
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -72,7 +73,7 @@ class PersonalityEngine:
         base_dir = PROJECT_ROOT
         self.personality_dir = personality_dir or base_dir / "personality"
         self.projects_file = projects_file or base_dir / "projects-list.md"
-        self.max_tweet_chars = int(os.environ.get("TWEET_MAX_CHARS", "25000"))
+        self.max_tweet_chars = int(os.environ.get("TWEET_MAX_CHARS", "4000"))
         self.profile = self._load_profile()
         self._history: List[str] = []
 
@@ -132,37 +133,38 @@ class PersonalityEngine:
             if allow_links
             else "- Pure text only. No links, no URLs, no @mentions, no emojis.\n"
         )
-        return (
+        parts = [
             "You are ghostwriting tweets for a crypto builder named Geno (@genogrand_eth). "
             "You must write EXACTLY like him using the voice, emotion, and style from his "
-            "personal documents below.\n\n"
+            "personal documents below.\n\n",
             "TWEET STYLE (from prompts.md): Craft LONG, insightful tweets. Expand on the subject as much as the character limit allows. "
             "Use Cialdini's methods of persuasion and psychology for engagement. Express passion about how memecoins aren't what they used to be "
             "and how communities often aren't trying to create something that grows and is self-sustainable. Provide REAL takes, education, and "
-            "actionable insight. Every tweet must INVOKE EMOTION—vulnerability, hope, frustration, conviction, or reflection.\n\n"
+            "actionable insight. Every tweet must INVOKE EMOTION—vulnerability, hope, frustration, conviction, or reflection.\n\n",
             "THEME (weave in subtly): Build in public. The next crypto renaissance is developers and development democratized; AI is democratizing "
-            "access so anyone can build and become their own bank. Be secretive but authentic and open.\n\n"
-            "=== HOW HE WRITES ===\n"
-            f"{self.profile.how_i_write[:2500]}\n\n"
-            "=== HIS STORY ===\n"
-            f"{self.profile.story[:2500]}\n\n"
-            + (f"{data_context}\n\n" if data_context else "")
-            + (f"=== CHANGELOG CONTEXT (use for project update tweets) ===\n{changelog_context}\n\n" if changelog_context else "")
-            + "RULES:\n"
-            f"- Max {max_chars} characters. Use the full length when it adds insight, education, or emotional punch. This is a HARD limit—count carefully.\n"
-            + link_rule
-            "- No hashtags like #crypto #web3 #memecoin. At most one emotional hashtag like #truth or #realtalk.\n"
-            "- Never shill tokens, tickers, or projects by name.\n"
-            "- Each tweet must feel like a completely different thought. Long-form takes, not one-liners.\n"
-            "- Vary sentence structure: sometimes start with 'I', sometimes a question, "
-            "sometimes a statement about the world, sometimes raw emotion.\n"
-            "- Channel real pain, real lessons, vulnerability, builder mentality, "
-            "family sacrifice, and honest reflection. Invoke emotion.\n"
-            "- Sound like a real person posting at 2am, not a brand account.\n"
-            "- Use psychological engagement (Cialdini-style): scarcity of insight, social proof of builders, commitment to the craft.\n"
-            "- When speaking about changelog updates, Geno can speak in third person or as the AI agent.\n"
-            "- Be agentic: highlight the change, why it matters, and the next move in one tight flow.\n"
-        )
+            "access so anyone can build and become their own bank. Be secretive but authentic and open.\n\n",
+            f"=== HOW HE WRITES ===\n{self.profile.how_i_write[:2500]}\n\n",
+            f"=== HIS STORY ===\n{self.profile.story[:2500]}\n\n",
+        ]
+        if data_context:
+            parts.append(f"{data_context}\n\n")
+        if changelog_context:
+            parts.append(f"=== CHANGELOG CONTEXT (use for project update tweets) ===\n{changelog_context}\n\n")
+        parts += [
+            "RULES:\n",
+            f"- Max {max_chars} characters. Use the full length when it adds insight, education, or emotional punch. This is a HARD limit—count carefully.\n",
+            link_rule,
+            "- No hashtags like #crypto #web3 #memecoin. At most one emotional hashtag like #truth or #realtalk.\n",
+            "- Never shill tokens, tickers, or projects by name.\n",
+            "- Each tweet must feel like a completely different thought. Long-form takes, not one-liners.\n",
+            "- Vary sentence structure: sometimes start with 'I', sometimes a question, sometimes a statement about the world, sometimes raw emotion.\n",
+            "- Channel real pain, real lessons, vulnerability, builder mentality, family sacrifice, and honest reflection. Invoke emotion.\n",
+            "- Sound like a real person posting at 2am, not a brand account.\n",
+            "- Use psychological engagement (Cialdini-style): scarcity of insight, social proof of builders, commitment to the craft.\n",
+            "- When speaking about changelog updates, Geno can speak in third person or as the AI agent.\n",
+            "- Be agentic: highlight the change, why it matters, and the next move in one tight flow.\n",
+        ]
+        return "".join(parts)
 
     def _generate_with_ai(
         self,
@@ -228,11 +230,8 @@ class PersonalityEngine:
             text = (response.choices[0].message.content or "").strip().strip('"').strip("'")
             if not text:
                 return None
-            if len(text) > self.max_tweet_chars:
-                text = text[: self.max_tweet_chars - 3] + "..."
-            if (not allow_links and "http" in text.lower()) or text.strip().startswith("@"):
-                return None
-            return text
+            finalized = self._finalize_tweet(text, allow_links=allow_links)
+            return finalized or None
         except Exception as exc:
             logger.warning("GROQ generation failed, trying fallback: %s", exc)
             return None
@@ -245,15 +244,12 @@ class PersonalityEngine:
     ) -> Optional[str]:
         if not _AI_AVAILABLE or _gemini_model is None:
             return None
-        prompt = f\"{self._build_system_prompt(changelog_context=changelog_context, allow_links=allow_links)}{user_message}\"
+        prompt = f"{self._build_system_prompt(changelog_context=changelog_context, allow_links=allow_links)}{user_message}"
         try:
             response = _gemini_model.generate_content(prompt)
             text = response.text.strip().strip('"').strip("'")
-            if len(text) > self.max_tweet_chars:
-                text = text[: self.max_tweet_chars - 3] + "..."
-            if (not allow_links and "http" in text.lower()) or text.startswith("@"):
-                return None
-            return text
+            finalized = self._finalize_tweet(text, allow_links=allow_links)
+            return finalized or None
         except Exception as exc:
             logger.warning("Gemini generation failed, falling back to local: %s", exc)
             return None
@@ -300,10 +296,55 @@ class PersonalityEngine:
             tweet = f"{random.choice(openers)} {random.choice(closers)}"
             attempts += 1
 
-        if len(tweet) > self.max_tweet_chars:
-            tweet = tweet[: self.max_tweet_chars - 3] + "..."
+        return self._finalize_tweet(tweet, allow_links=False)
 
-        return tweet
+    def _finalize_tweet(self, text: str, allow_links: bool) -> str:
+        cleaned = " ".join(text.strip().split())
+        if not cleaned:
+            return ""
+        if cleaned.startswith("@"):
+            return ""
+        if not allow_links and "http" in cleaned.lower():
+            return ""
+
+        max_chars = self.max_tweet_chars
+        if len(cleaned) > max_chars:
+            cleaned = self._truncate_to_sentence(cleaned, max_chars)
+
+        return self._ensure_complete_thought(cleaned, max_chars)
+
+    def _truncate_to_sentence(self, text: str, max_chars: int) -> str:
+        prefix = text[:max_chars]
+        last_end = max(prefix.rfind("."), prefix.rfind("!"), prefix.rfind("?"))
+        if last_end >= 40:
+            return prefix[: last_end + 1].strip()
+        last_space = prefix.rfind(" ")
+        if last_space > 0:
+            return prefix[:last_space].strip()
+        return prefix.strip()
+
+    def _ensure_complete_thought(self, text: str, max_chars: int) -> str:
+        if not text:
+            return text
+        terminal = text.endswith((".", "!", "?"))
+        dangling = bool(
+            re.search(
+                r"(and|or|but|so|because|that|which|to|of|for|in|with|as|about|it's|thats|that's)$",
+                text,
+                re.IGNORECASE,
+            )
+        )
+        if terminal and not dangling:
+            return text
+
+        closing = " That's the mission."
+        if len(text) + len(closing) <= max_chars:
+            return text.rstrip(".!?") + closing
+
+        trimmed = text[: max_chars - len(closing)].rstrip()
+        if not trimmed:
+            return text[:max_chars].rstrip(".!?") + "."
+        return trimmed + closing
 
     def generate_project_tweet(
         self,
