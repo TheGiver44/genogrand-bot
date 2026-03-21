@@ -83,6 +83,16 @@ This will:
 python -m src.scheduler
 ```
 
+#### Python version pinning
+
+A `.python-version` file pins the build to **Python 3.12**. This prevents Railpack/mise from auto-selecting Python 3.13's freethreaded build (`freethreaded-install_only_stripped`), which ships without a `lib/` directory and causes the build to fail with:
+
+```
+mise ERROR Failed to install core:python@3.13.x: Python installation is missing a `lib` directory
+```
+
+Do not remove `.python-version` or bump it to `3.13` until the upstream freethreaded packaging issue is resolved in mise.
+
 ### Safety & Constraints
 
 - Tweets:
