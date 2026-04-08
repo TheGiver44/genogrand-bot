@@ -10,6 +10,7 @@ from typing import Dict, Iterable, List, Optional
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CHANGELOG_DIR = PROJECT_ROOT / "data" / "changelogs"
 SELF_CHANGELOG = PROJECT_ROOT / "CHANGELOG.md"
+BOONA_CHANGELOG = PROJECT_ROOT / "data" / "Changelog-boona.md"
 LINKS_FILE = CHANGELOG_DIR / "links.json"
 
 
@@ -74,6 +75,21 @@ def discover_changelog_sources() -> List[ChangelogSource]:
                 slug="genogrand_bot",
                 name=name,
                 path=SELF_CHANGELOG,
+                cta_label=cta_label,
+                links=links,
+            )
+        )
+
+    if BOONA_CHANGELOG.is_file():
+        config = links_config.get("boona", {}) if isinstance(links_config, dict) else {}
+        name = str(config.get("name", "Boona")).strip() or "Boona"
+        cta_label = str(config.get("cta_label")).strip() if config.get("cta_label") else None
+        links = [str(link) for link in config.get("links", []) if isinstance(link, str)]
+        sources.append(
+            ChangelogSource(
+                slug="boona",
+                name=name,
+                path=BOONA_CHANGELOG,
                 cta_label=cta_label,
                 links=links,
             )
@@ -171,14 +187,15 @@ def build_changelog_tweet_local(
     section = _extract_latest_section(raw)
     heading = _extract_section_heading(section) if section else f"{source.name} update"
     bullets = _extract_bullets(section, limit=3)
+    cleaned_bullets = [bullet.rstrip(".") for bullet in bullets]
 
     prefix = f"Geno update on {source.name}: {heading}".strip()
-    body = "; ".join(bullets)
+    body = ". ".join(cleaned_bullets)
     base = f"{prefix}. {body}" if body else prefix
 
     cta_link = source.links[0] if source.links else None
     cta_label = source.cta_label or "Details"
-    cta = f" | {cta_label}: {cta_link}" if cta_link else ""
+    cta = f" Follow: {cta_link}" if cta_link else ""
 
     if cta:
         available = max_chars - len(cta)
